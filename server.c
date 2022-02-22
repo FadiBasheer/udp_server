@@ -7,7 +7,10 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <sys/mman.h>
+#include <unistd.h>
+#include <fcntl.h>
 
+#define PORT 4981
 #define MAXLINE 1024
 int *ptr;
 
@@ -31,7 +34,7 @@ int main(int argc, char *argv[]) {
 
     /* Initialize socket structure */
     bzero((char *) &serv_addr, sizeof(serv_addr));
-    portno = 5001;
+    portno = PORT;
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -52,6 +55,7 @@ int main(int argc, char *argv[]) {
     clilen = sizeof(cli_addr);
 
     while (1) {
+        printf("acepting\n");
         newsockfd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
 
         if (newsockfd < 0) {
@@ -70,6 +74,7 @@ int main(int argc, char *argv[]) {
         if (pid == 0) {
             /* This is the client process */
             close(sockfd);
+
             doprocessing(newsockfd);
             exit(0);
         } else {
@@ -87,8 +92,7 @@ void doprocessing(int sock) {
     ptr = mmap(NULL, N * sizeof(int),
                PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, 0, 0);
 
-
-    int n;
+    ssize_t n;
     char buffer[256];
     printf("welcome\n");
 
@@ -100,7 +104,7 @@ void doprocessing(int sock) {
         exit(1);
     }
 
-    printf("Here is the message: %s\n", buffer);
+    printf("TCP message: %s\n", buffer);
     if ((strncmp(buffer, "exit", 4)) == 0) {
         write(sock, "exit", 4);
         return;
@@ -129,30 +133,34 @@ void doprocessing(int sock) {
             exit(1);
         }
 
-        printf("Here is the message: %s\n", buffer);
+        printf("TCP loop message: %s\n", buffer);
         if ((strncmp(buffer, "exit", 4)) == 0) {
-            write(sock, &ptr[1], 2);
             ptr[0] = 1;
 
-            printf("exiiiiiiiiit %d\n", ptr[1]);
+            if (pthread_join(th, NULL) != 0) {
+                perror("Failed to join thread");
+            }
+
+            write(sock, &ptr[1], 2);
+            printf("TCP exit %d\n", ptr[1]);
             break;
         }
 
-        n = write(sock, "I got your message", 18);
+        n = write(sock, "I got your message TCP", 18);
 
         if (n < 0) {
             perror("ERROR writing to socket");
             exit(1);
         }
     }
-    printf("bye");
+    printf("bye from TCP\n");
 }
 
 
 void *UDP(int sock) {
     int counter = 0;
     printf("helooooooooooooooooooUDP\n");
-    sock = 5001;
+    sock = PORT;
     uint16_t port = (uint16_t) sock;
     printf("port: %hu\n", port);
 
@@ -188,18 +196,28 @@ void *UDP(int sock) {
         perror("bind failed");
         exit(EXIT_FAILURE);
     }
-    int len, n;
+    ssize_t len, n;
 
-    len = sizeof(cliaddr); //len is value/resuslt
+    len = sizeof(cliaddr);
+
+
+    int flags = fcntl(sockfd, F_GETFL);
+    flags |= O_NONBLOCK;
+    fcntl(sockfd, F_SETFL, flags);
+
     while (ptr[0] == 0) {
         n = recvfrom(sockfd, (char *) buffer, MAXLINE,
                      MSG_WAITALL, (struct sockaddr *) &cliaddr,
-                     &len);
-        buffer[n] = '\0';
-        printf("Client UDP: %s fuel: %d\n", buffer, ptr[0]);
-        ptr[1] = counter;
-        counter++;
+                     (socklen_t *) &len);
+        if (n != -1) {
+            buffer[n] = '\0';
+            printf("Client UDP: %s fuel: %d\n", buffer, ptr[0]);
+            counter++;
+            sleep(1);
+        }
+        //  printf("UDP \n");
     }
-    printf("counter; %d\n", counter);
+    //  ptr[1] = counter;
+    printf("UDP exit and counter: %d\n", counter);
     return NULL;
 }
