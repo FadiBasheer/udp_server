@@ -40,7 +40,7 @@ int stastic(int *numbers, int size) {
 void out_of_order(int *numbers, int size) {
     int i = 1, dif = 0, min = 0, max = 0;
     while (i < size) {
-        if (numbers[i-1] == i) {
+        if (numbers[i - 1] == i) {
             dif++;
             printf("dif0: %d\n", dif);
         } else {
@@ -78,6 +78,11 @@ void out_of_order(int *numbers, int size) {
         dif = 0;
     }
     printf("min: %d max: %d\n", min, max);
+
+
+    FILE *fp;
+    fp = fopen("data.log", "w");
+    fprintf(fp, "print this");
 }
 
 int main() {
